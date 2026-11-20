@@ -139,12 +139,14 @@ def graficar():
         a.set_title(titulo, fontsize=10); a.tick_params(axis="x", labelsize=8)
     fig.tight_layout(); fig.savefig(SALIDA / "metricas.png", dpi=130)
 
-    # BLEU por frase según duración del audio
-    p = pd.read_csv(SALIDA / "predicciones.csv")
-    p = p[p.tarea == "s2tt"].copy()
-    p["bleu"] = [sacrebleu.sentence_bleu(str(h), [str(rf)]).score for h, rf in zip(p.hipotesis, p.referencia)]
-    p["rango"] = pd.cut(p.duracion_s, [0, 8, 12, 16, 40], labels=["<8 s", "8–12 s", "12–16 s", ">16 s"])
-    tabla = p.groupby(["rango", "modelo"], observed=True).bleu.mean().unstack()
+    # BLEU por frase según duración del audio (la tabla se guarda en CSV para el repositorio)
+    if (SALIDA / "predicciones.csv").exists():
+        p = pd.read_csv(SALIDA / "predicciones.csv")
+        p = p[p.tarea == "s2tt"].copy()
+        p["bleu"] = [sacrebleu.sentence_bleu(str(h), [str(rf)]).score for h, rf in zip(p.hipotesis, p.referencia)]
+        p["rango"] = pd.cut(p.duracion_s, [0, 8, 12, 16, 40], labels=["<8 s", "8-12 s", "12-16 s", ">16 s"])
+        p.groupby(["rango", "modelo"], observed=True).bleu.mean().unstack().round(2).to_csv(SALIDA / "bleu_por_duracion.csv")
+    tabla = pd.read_csv(SALIDA / "bleu_por_duracion.csv", index_col=0)
     ax = tabla.plot(kind="bar", color=[colores[c] for c in tabla.columns], figsize=(8, 4))
     ax.set_title("BLEU promedio por frase según duración del audio"); ax.set_ylabel("BLEU"); ax.set_xlabel("")
     plt.xticks(rotation=0); plt.tight_layout(); plt.savefig(SALIDA / "bleu_por_duracion.png", dpi=130)
