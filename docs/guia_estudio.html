@@ -1,0 +1,405 @@
+<title>SeamlessM4T por dentro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: índice fijo a la izquierda (escritorio) + columna de lectura de ~70ch; en móvil, una sola columna. */
+:root {
+  --bg: #f4f6fb; --surface: #ffffff; --ink: #141a2e; --muted: #59617c; --line: #dce1ec;
+  --accent: #2c56cf; --accent-soft: #e6ecfb; --amber: #b8661c; --amber-soft: #fbefe2;
+  --ok: #1f7a4a; --ok-soft: #e3f3ea;
+  --f-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1120; --surface: #151b2d; --ink: #e7eaf4; --muted: #9aa3be; --line: #273049;
+  --accent: #86a2ff; --accent-soft: #1d2747; --amber: #f0a65e; --amber-soft: #33261a;
+  --ok: #6fd39c; --ok-soft: #15301f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d1120; --surface: #151b2d; --ink: #e7eaf4; --muted: #9aa3be; --line: #273049;
+  --accent: #86a2ff; --accent-soft: #1d2747; --amber: #f0a65e; --amber-soft: #33261a;
+  --ok: #6fd39c; --ok-soft: #15301f; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 16px/1.65 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; padding-block: 40px 80px }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 14px; max-height: calc(100vh - 48px); overflow-y: auto }
+nav.toc p { font: 600 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: s }
+nav.toc a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--muted); text-decoration: none }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--accent-soft); color: var(--ink); outline: none }
+main { min-width: 0; max-width: 72ch }
+header.hero { padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 8px }
+.eyebrow { font: 600 12px var(--f-body); letter-spacing: .1em; text-transform: uppercase; color: var(--accent) }
+h1 { font: 700 clamp(34px, 6vw, 52px)/1.05 var(--f-display); margin: 10px 0 14px; text-wrap: balance; letter-spacing: -.02em }
+h2 { font: 700 27px/1.2 var(--f-display); margin: 56px 0 14px; text-wrap: balance; scroll-margin-top: 20px }
+h3 { font: 600 18px/1.3 var(--f-display); margin: 28px 0 8px }
+p { margin: 0 0 14px }
+.lead { font-size: 18px; color: var(--muted) }
+code, .mono { font-family: var(--f-mono); font-size: .88em }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px }
+a { color: var(--accent) }
+.formula { font: 600 17px/1.5 var(--f-mono); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; overflow-x: auto; margin: 10px 0 16px; white-space: nowrap }
+.say { border-left: 3px solid var(--amber); background: var(--amber-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0 }
+.say b:first-child { font: 600 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--amber); display: block; margin-bottom: 4px }
+.tbl { overflow-x: auto; margin: 12px 0 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface) }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; font-variant-numeric: tabular-nums }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font-weight: 600; color: var(--muted); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; background: var(--bg) }
+tr:last-child td { border-bottom: 0 }
+td.num { text-align: right; font-family: var(--f-mono); font-size: 13.5px }
+.steps { counter-reset: paso; display: grid; gap: 14px; margin: 16px 0 }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 6px }
+.step h3 { margin-top: 0; display: flex; gap: 10px; align-items: baseline }
+.step h3::before { counter-increment: paso; content: counter(paso); font: 700 13px var(--f-mono); color: var(--accent); background: var(--accent-soft); border-radius: 50%; min-width: 26px; height: 26px; display: inline-grid; place-items: center }
+.step dl { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 12px; margin: 6px 0 12px; font-size: 15px }
+.step dt { font-weight: 600; color: var(--muted) }
+.step dd { margin: 0 }
+.check { list-style: none; padding: 0; display: grid; gap: 8px }
+.check li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px }
+.check li::before { content: "✓"; color: var(--ok); font-weight: 700 }
+.qa details { border-bottom: 1px solid var(--line); padding: 10px 0 }
+.qa summary { cursor: pointer; font-weight: 600 }
+.qa details p { margin: 8px 0 4px; color: var(--ink) }
+figure { margin: 18px 0 }
+.diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px }
+.diagram svg { display: block; min-width: 640px; width: 100%; height: auto }
+figcaption { font-size: 13.5px; color: var(--muted); margin-top: 8px }
+svg .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.5 }
+svg .enc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5 }
+svg .dec { fill: var(--amber-soft); stroke: var(--amber); stroke-width: 1.5 }
+svg text { fill: var(--ink); font: 500 13px var(--f-body) }
+svg .small { fill: var(--muted); font-size: 11.5px }
+svg .lbl { font: 600 12px var(--f-mono) }
+svg .arrow { stroke: var(--muted); stroke-width: 1.6; fill: none }
+svg .kv { stroke: var(--accent); stroke-width: 2; fill: none; stroke-dasharray: 5 4 }
+svg .ah { fill: var(--muted) } svg .ahk { fill: var(--accent) }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 14px 0 }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px }
+.card h3 { margin: 0 0 6px; font-size: 16px }
+.card p { font-size: 14.5px; margin: 0 }
+.timeline { display: grid; gap: 10px; margin: 14px 0 }
+.slot { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px }
+.slot .t { font: 600 14px var(--f-mono); color: var(--accent) }
+.slot p { margin: 0; font-size: 15px }
+pre.cmd { font: 14px/1.5 var(--f-mono); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto }
+footer { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px }
+@media (max-width: 880px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; padding-block: 24px 60px }
+  nav.toc { position: static; max-height: none; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface) }
+  nav.toc ol { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) }
+  .step dl { grid-template-columns: minmax(0, 1fr) } .step dt { margin-top: 6px }
+  .slot { grid-template-columns: minmax(0, 1fr); gap: 4px }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth } }
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Contenido">
+  <p>Contenido</p>
+  <ol>
+    <li><a href="#resumen">En 30 segundos</a></li>
+    <li><a href="#pide">Qué pide el profesor</a></li>
+    <li><a href="#problema">El problema</a></li>
+    <li><a href="#mapa">El mapa completo</a></li>
+    <li><a href="#entrada">Entrada: audio → vectores</a></li>
+    <li><a href="#atencion">Atención en 6 pasos</a></li>
+    <li><a href="#multihead">Multi-Head</a></li>
+    <li><a href="#encoder">Encoder Conformer</a></li>
+    <li><a href="#adaptador">Adaptador de longitud</a></li>
+    <li><a href="#decoder">Decoder</a></li>
+    <li><a href="#formas">Dimensiones</a></li>
+    <li><a href="#innovaciones">Innovaciones</a></li>
+    <li><a href="#resultados">Resultados</a></li>
+    <li><a href="#limitaciones">Limitaciones</a></li>
+    <li><a href="#demo">Cómo correr la demo</a></li>
+    <li><a href="#guion">Guion de 15 minutos</a></li>
+    <li><a href="#preguntas">Preguntas probables</a></li>
+    <li><a href="#glosario">Glosario</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">Procesamiento de Datos Secuenciales · Proyecto final · Grupo 5</div>
+  <h1>SeamlessM4T por dentro</h1>
+  <p class="lead">Guía para entender y explicar el proyecto: un Transformer encoder–decoder de Meta que escucha voz en ~100 idiomas y escribe la transcripción o la traducción. Usamos sus pesos preentrenados, reescribimos la inferencia a mano y mostramos Q, K, V y la atención en una app.</p>
+</header>
+
+<h2 id="resumen">En 30 segundos</h2>
+<p><b>Artículo:</b> Seamless Communication, L. Barrault <i>et al.</i>, “Seamless: Multilingual Expressive and Streaming Speech Translation”, arXiv:2312.05187, diciembre de 2023 (Meta). Código: <a href="https://github.com/facebookresearch/seamless_communication">facebookresearch/seamless_communication</a>. Pesos: <code>facebook/seamless-m4t-v2-large</code>.</p>
+<p><b>Qué hace:</b> recibe voz y devuelve texto. Si le pides el mismo idioma del audio, <b>transcribe</b>; si le pides otro, <b>traduce</b>. Todo con un solo modelo, sin pasar por un transcriptor y luego un traductor.</p>
+<p><b>Qué hicimos:</b> (1) cargamos los pesos oficiales; (2) reescribimos las 48 capas a mano (24 del encoder Conformer y 24 del decoder) con Q, K, V, Q·Kᵀ, ÷√d<sub>k</sub>, máscara y softmax explícitos, y comprobamos que da exactamente el mismo resultado que el modelo oficial; (3) una app en Streamlit para cargar o grabar audio y ver la atención; (4) medimos WER y BLEU contra Whisper.</p>
+<div class="say"><b>Frase para abrir</b>“SeamlessM4T es un Transformer encoder–decoder como el de clase: el encoder escucha el audio y el decoder escribe palabra por palabra en el idioma que le pidamos, preguntándole al audio con cross-attention qué parte debe traducir en cada momento.”</div>
+
+<h2 id="pide">Qué pide el profesor y dónde está</h2>
+<div class="tbl"><table>
+<tr><th>Requisito</th><th>Dónde lo cumplimos</th></tr>
+<tr><td>Artículo ≤ 3 años, encoder–decoder, código y pesos</td><td>Seamless (dic. 2023): encoder de voz + decoder de texto (sección 3.2.2, figura 3), repo oficial y pesos públicos</td></tr>
+<tr><td>Datos secuenciales complejos</td><td>Voz → texto (secuencia → secuencia)</td></tr>
+<tr><td>Implementar la inferencia</td><td><code>src/seamless_paso_a_paso.py</code> (a mano) y <code>src/modelo.py</code> (oficial)</td></tr>
+<tr><td>Entradas y salidas</td><td>Pestañas “Resultado” y “Arquitectura y dimensiones” de la app</td></tr>
+<tr><td>Atención y Q, K, V</td><td>Pestañas “Q·K·V paso a paso”, “Cross-attention”, “Encoder”, “Decoder”</td></tr>
+<tr><td>Innovaciones y limitaciones</td><td>Secciones de esta guía y del README</td></tr>
+<tr><td>Visualización interactiva</td><td><code>app.py</code> (Streamlit): ejemplos, subir archivo o micrófono</td></tr>
+<tr><td>Métricas</td><td><code>scripts/evaluar.py</code>: WER, CER, BLEU, chrF, RTF vs Whisper</td></tr>
+<tr><td>GitHub + README de 8 secciones</td><td><a href="https://github.com/MiguelDiuza/seamless-traductor">MiguelDiuza/seamless-traductor</a></td></tr>
+</table></div>
+
+<h2 id="problema">El problema</h2>
+<p>Dos personas sin idioma común no pueden hablar. Lo clásico es una <b>cascada</b>: un sistema transcribe la voz y otro traduce el texto. Los errores del primero llegan al segundo, y son dos modelos separados.</p>
+<p>Seamless lo hace <b>de extremo a extremo</b>: un encoder convierte el audio en vectores y un decoder escribe directamente el texto en el idioma pedido. El audio es una secuencia larga (16 000 muestras por segundo) y el texto una corta, en otro idioma y a veces con otro orden de palabras: justo el caso para un encoder–decoder con cross-attention.</p>
+
+<h2 id="mapa">El mapa completo</h2>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 760 340" role="img" aria-label="Flujo de SeamlessM4T v2: audio, banco de filtros, encoder Conformer, adaptador, memoria K y V, decoder con tokens previos, softmax, texto">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ak" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahk" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect class="box" x="6" y="30" width="104" height="64" rx="10"/>
+  <text x="58" y="58" text-anchor="middle">Audio</text>
+  <text class="small" x="58" y="78" text-anchor="middle">16 kHz</text>
+  <rect class="enc" x="126" y="30" width="128" height="64" rx="10"/>
+  <text x="190" y="56" text-anchor="middle">Filtros Mel</text>
+  <text class="small" x="190" y="76" text-anchor="middle">160 × 50 por s</text>
+  <rect class="enc" x="270" y="30" width="162" height="64" rx="10"/>
+  <text x="351" y="56" text-anchor="middle">Encoder × 24</text>
+  <text class="small" x="351" y="76" text-anchor="middle">Conformer (w2v-BERT 2.0)</text>
+  <rect class="enc" x="448" y="30" width="122" height="64" rx="10"/>
+  <text x="509" y="56" text-anchor="middle">Adaptador</text>
+  <text class="small" x="509" y="76" text-anchor="middle">÷8 la longitud</text>
+  <rect class="enc" x="586" y="30" width="120" height="64" rx="10"/>
+  <text x="646" y="56" text-anchor="middle">Memoria</text>
+  <text class="small lbl" x="646" y="77" text-anchor="middle">≈6/s × 1024</text>
+  <path class="arrow" d="M110,62 H122" marker-end="url(#a)"/>
+  <path class="arrow" d="M254,62 H266" marker-end="url(#a)"/>
+  <path class="arrow" d="M432,62 H444" marker-end="url(#a)"/>
+  <path class="arrow" d="M570,62 H582" marker-end="url(#a)"/>
+  <path class="kv" d="M646,94 V170 H505" marker-end="url(#ak)"/>
+  <text class="lbl" x="662" y="140" style="fill:var(--accent)">K, V</text>
+  <rect class="box" x="6" y="210" width="120" height="64" rx="10"/>
+  <text x="66" y="236" text-anchor="middle">Tokens previos</text>
+  <text class="small" x="66" y="256" text-anchor="middle">&lt;/s&gt; __eng__ …</text>
+  <rect class="dec" x="146" y="210" width="140" height="64" rx="10"/>
+  <text x="216" y="236" text-anchor="middle">Embedding ×32</text>
+  <text class="small" x="216" y="256" text-anchor="middle">+ posición sinusoidal</text>
+  <rect class="dec" x="306" y="146" width="196" height="184" rx="10"/>
+  <text x="404" y="172" text-anchor="middle">Decoder × 24</text>
+  <text class="small" x="404" y="202" text-anchor="middle">① self-attention enmascarada</text>
+  <text class="small" x="404" y="232" text-anchor="middle">② cross-attention</text>
+  <text class="small lbl" x="404" y="250" text-anchor="middle">Q texto · K,V audio</text>
+  <text class="small" x="404" y="280" text-anchor="middle">③ FFN ReLU 8192</text>
+  <rect class="dec" x="522" y="210" width="130" height="64" rx="10"/>
+  <text x="587" y="236" text-anchor="middle">lm_head + softmax</text>
+  <text class="small" x="587" y="256" text-anchor="middle">256 102 tokens</text>
+  <rect class="box" x="668" y="210" width="86" height="64" rx="10"/>
+  <text x="711" y="246" text-anchor="middle">“concerts”</text>
+  <path class="arrow" d="M126,242 H142" marker-end="url(#a)"/>
+  <path class="arrow" d="M286,242 H302" marker-end="url(#a)"/>
+  <path class="arrow" d="M502,242 H518" marker-end="url(#a)"/>
+  <path class="arrow" d="M652,242 H664" marker-end="url(#a)"/>
+  <path class="arrow" d="M711,274 V320 H66 V278" marker-end="url(#a)"/>
+  <text class="small" x="580" y="314" text-anchor="middle">se agrega a la entrada; se repite hasta &lt;/s&gt;</text>
+</svg>
+</div>
+<figcaption>Azul: encoder (escucha; se ejecuta una vez). Naranja: decoder (escribe; una vez por token). La línea punteada es la cross-attention, la única conexión entre los dos lados.</figcaption>
+</figure>
+
+<h2 id="entrada">Entrada: del audio a vectores</h2>
+<div class="tbl"><table>
+<tr><th>Paso</th><th>Qué hace</th><th>Forma (audio de 5,6 s)</th></tr>
+<tr><td>Onda</td><td>Mono, 16 000 muestras por segundo</td><td class="num">89 600</td></tr>
+<tr><td>Banco de filtros</td><td>80 filtros Mel cada 10 ms (energía por banda de frecuencia), normalizados</td><td class="num">556 × 80</td></tr>
+<tr><td>Apilado ×2</td><td>Se juntan 2 frames seguidos: cada vector cubre 20 ms</td><td class="num">278 × 160</td></tr>
+<tr><td>Proyección</td><td>LayerNorm + capa lineal 160 → 1024</td><td class="num">278 × 1024</td></tr>
+</table></div>
+<p>Esos 278 vectores son, para el Transformer, lo mismo que 278 “palabras”. Es la misma idea del embedding de clase, pero para sonido.</p>
+
+<h2 id="atencion">Atención en 6 pasos</h2>
+<p>Analogía de clase (YouTube): <b>Q</b> es lo que escribes en el buscador (<i>¿qué busco?</i>), <b>K</b> los títulos de los videos (<i>¿qué información tengo?</i>) y <b>V</b> los videos (<i>¿qué voy a comunicar?</i>).</p>
+<div class="formula">Attention(Q, K, V) = softmax( Q·Kᵀ / √d<sub>k</sub> + B + M ) · V</div>
+<div class="steps">
+<section class="step"><h3>Q, K, V a partir de X</h3>
+  <div class="formula">Q = X·W<sub>Q</sub> &nbsp; K = X·W<sub>K</sub> &nbsp; V = X·W<sub>V</sub></div>
+  <dl><dt>Qué</dt><dd>Tres multiplicaciones por matrices aprendidas de 1024 × 1024.</dd>
+  <dt>Por qué</dt><dd>Cada posición cumple tres papeles: buscar, ser encontrada y aportar contenido. Con X sola la similitud sería simétrica y no se podría aprender qué es relevante para quién.</dd>
+  <dt>Cómo leerlo</dt><dd>Fila de Q = pregunta de una posición; fila de K = su etiqueta; fila de V = su contenido.</dd></dl>
+</section>
+<section class="step"><h3>Q·Kᵀ</h3>
+  <dl><dt>Qué</dt><dd>Producto punto de cada consulta con cada clave: matriz T<sub>q</sub> × T<sub>k</sub>.</dd>
+  <dt>Por qué</dt><dd>El producto punto mide qué tan alineados están dos vectores (gato/perro en clase). En forma matricial se calculan todas las parejas en paralelo.</dd>
+  <dt>Cómo leerlo</dt><dd>Celda (i, j) alta = lo que ofrece j le sirve a i.</dd></dl>
+</section>
+<section class="step"><h3>÷√d<sub>k</sub></h3>
+  <dl><dt>Qué</dt><dd>d<sub>k</sub> = 1024 / 16 = 64, así que se divide por 8.</dd>
+  <dt>Por qué</dt><dd>El producto punto suma 64 términos y crece como √64. Sin escalar, el softmax se vuelve casi one-hot y el gradiente casi cero.</dd>
+  <dt>Cómo leerlo</dt><dd>En la app: barra gris (sin escalar) contra barra naranja (escalada).</dd></dl>
+</section>
+<section class="step"><h3>B: posición relativa (solo encoder)</h3>
+  <dl><dt>Qué</dt><dd>Se suma q·r<sub>(j−i)</sub>/√d<sub>k</sub>: un vector aprendido por cada distancia entre frames (de −64 a +8).</dd>
+  <dt>Por qué</dt><dd>La atención no conoce el orden. En vez de sumar una posición absoluta al embedding, el Conformer le dice a cada par de frames qué tan lejos están, que es lo que importa en el habla.</dd>
+  <dt>Cómo leerlo</dt><dd>Hace que muchas cabezas del encoder prefieran frames cercanos (diagonal en la app).</dd></dl>
+</section>
+<section class="step"><h3>M: máscara (solo self-attention del decoder)</h3>
+  <dl><dt>Qué</dt><dd>−∞ en el triángulo superior (posiciones futuras).</dd>
+  <dt>Por qué</dt><dd>En entrenamiento el decoder recibe la frase correcta completa; sin máscara copiaría la siguiente palabra. En inferencia el futuro aún no existe: la máscara hace que ambos casos funcionen igual.</dd>
+  <dt>Cómo leerlo</dt><dd>e<sup>−∞</sup> = 0: tras el softmax esas posiciones pesan exactamente cero.</dd></dl>
+</section>
+<section class="step"><h3>softmax y ·V</h3>
+  <div class="formula">α<sub>ij</sub> = e<sup>s<sub>ij</sub></sup> / Σ<sub>k</sub> e<sup>s<sub>ik</sub></sup> &nbsp;&nbsp; z<sub>i</sub> = Σ<sub>j</sub> α<sub>ij</sub>·v<sub>j</sub></div>
+  <dl><dt>Qué</dt><dd>Cada fila se vuelve una distribución (0 a 1, suma 1) y se promedian los valores con esos pesos.</dd>
+  <dt>Por qué</dt><dd>Repartir “una unidad de atención” (soft attention de clase). Los pesos dicen a quién escuchar; V dice qué se escucha.</dd>
+  <dt>Cómo leerlo</dt><dd>z<sub>i</sub> = nuevo vector de la posición i, enriquecido con lo que necesitaba de las demás.</dd></dl>
+</section>
+</div>
+
+<h2 id="multihead">Multi-Head Attention</h2>
+<p>Los 1024 números se parten en <b>16 cabezas de 64</b>. Cada una tiene sus propias W<sub>Q</sub>, W<sub>K</sub>, W<sub>V</sub>; al final se concatenan (16 × 64 = 1024) y se mezclan con W<sub>O</sub>. <b>Por qué:</b> cada cabeza se especializa en una relación distinta (frames vecinos, contexto amplio, silencios, alineación con una palabra). Cuesta lo mismo que una cabeza grande.</p>
+
+<h2 id="encoder">Encoder: 24 bloques Conformer (w2v-BERT 2.0)</h2>
+<div class="formula">h += ½·FFN(h) → h += SelfAttn(h) → h += Conv(h) → h += ½·FFN(h) → LayerNorm</div>
+<ul>
+  <li><b>Self-attention sin máscara:</b> cada frame (20 ms) mira todo el audio, pasado y futuro, con posición relativa.</li>
+  <li><b>Convolución (k = 31):</b> capta patrones locales de ~0,6 s (sílabas, transiciones entre fonemas). La atención ve lo global y la convolución lo local: por eso “Conformer” = <i>Convolution + Transformer</i>.</li>
+  <li><b>Dos medios FFN</b> (estilo <i>macaron</i>): uno antes y otro después, cada uno con peso ½.</li>
+  <li><b>Preentrenado sin etiquetas</b> con 4,5 millones de horas de audio: aprendió a representar el habla antes de aprender a traducir.</li>
+</ul>
+
+<h2 id="adaptador">Adaptador de longitud</h2>
+<p>Una convolución con salto 8 reduce la secuencia: de ~50 vectores por segundo a ~6 (cada uno resume 160 ms). <b>Por qué:</b> una frase de 5 s tiene ~15 palabras pero 278 frames; acortar la memoria la acerca a la longitud del texto y hace la cross-attention 8 veces más barata.</p>
+
+<h2 id="decoder">Decoder de texto (de NLLB)</h2>
+<p>Entrada: <code>&lt;/s&gt;</code> + el token del <b>idioma destino</b> (<code>__spa__</code>, <code>__eng__</code>…) + lo ya escrito. Embedding × √1024 = ×32, más posición sinusoidal. Cada uno de los 24 bloques:</p>
+<div class="cols">
+  <div class="card"><h3>① Self-attention enmascarada</h3><p>Q, K, V salen de lo ya escrito. Cada token mira solo hacia atrás. Da coherencia al idioma de salida.</p></div>
+  <div class="card"><h3>② Cross-attention</h3><p><b>Q</b> sale del decoder (lo escrito); <b>K y V</b> de la memoria del audio. Pregunta: “¿qué parte del audio debo traducir ahora?”.</p></div>
+  <div class="card"><h3>③ FFN ReLU</h3><p>1024 → 8192 → 1024 para cada token por separado.</p></div>
+</div>
+<h3>¿Por qué Q del decoder y K, V del encoder?</h3>
+<p>Quien necesita información es el decoder (va a escribir), así que él pregunta. La información está en el audio, así que las etiquetas (K) y el contenido (V) vienen del encoder.</p>
+<h3>Lo que se ve en la app</h3>
+<ul>
+  <li><b>Transcripción:</b> la cross-attention forma una <b>diagonal</b>; el texto avanza al ritmo de la voz.</li>
+  <li><b>Traducción:</b> la diagonal se <b>rompe</b> donde el inglés cambia el orden (adjetivo antes del sustantivo): el decoder salta a la parte del audio que necesita.</li>
+  <li>El <b>token de idioma</b> es lo único distinto entre transcribir y traducir: el mismo audio y la misma memoria producen salidas en idiomas diferentes.</li>
+</ul>
+<h3>Salida</h3>
+<p>LayerNorm → <code>lm_head</code> 1024 → 256 102 (logits) → softmax → se elige el más probable (greedy) → se agrega a la entrada → se repite hasta <code>&lt;/s&gt;</code>. Es el mismo bucle del ejemplo de MNIST de clase.</p>
+
+<h2 id="formas">Dimensiones de punta a punta</h2>
+<div class="tbl"><table>
+<tr><th>Tensor</th><th>Forma (audio de 5,6 s)</th></tr>
+<tr><td>input_features</td><td class="num">278 × 160</td></tr>
+<tr><td>Salida de cada bloque Conformer</td><td class="num">278 × 1024</td></tr>
+<tr><td>Q, K, V por cabeza (encoder)</td><td class="num">278 × 64</td></tr>
+<tr><td>Atención por cabeza (encoder)</td><td class="num">278 × 278</td></tr>
+<tr><td>Memoria tras el adaptador</td><td class="num">35 × 1024</td></tr>
+<tr><td>Cross-attention por cabeza</td><td class="num">T<sub>texto</sub> × 35</td></tr>
+<tr><td>FFN del decoder</td><td class="num">T × 8192</td></tr>
+<tr><td>Logits</td><td class="num">T × 256 102</td></tr>
+<tr><td>Parámetros (voz → texto)</td><td class="num">≈ 1,5 mil millones</td></tr>
+</table></div>
+
+<h2 id="innovaciones">Innovaciones</h2>
+<div class="cols">
+  <div class="card"><h3>1 · De extremo a extremo y multilingüe</h3><p>Un solo modelo traduce voz de 100 idiomas a texto en 96, sin cascada. En el artículo supera a Whisper-Large-v2 en traducción (BLEU 26,6 vs 17,9 en FLEURS X→inglés).</p></div>
+  <div class="card"><h3>2 · w2v-BERT 2.0</h3><p>Encoder preentrenado sin etiquetas con 4,5 millones de horas (la versión 1 usaba 1 millón).</p></div>
+  <div class="card"><h3>3 · Conformer</h3><p>Atención (global) + convolución (local) + posición relativa: más adecuado para el habla que un Transformer puro.</p></div>
+  <div class="card"><h3>4 · Adaptador de longitud</h3><p>Comprime el audio 8× antes del decoder: acerca las longitudes y abarata la cross-attention.</p></div>
+  <div class="card"><h3>5 · Un token decide la tarea</h3><p>El mismo decoder transcribe o traduce según el token de idioma.</p></div>
+  <div class="card"><h3>6 · UnitY2 (fuera de nuestro alcance)</h3><p>Un decoder no autoregresivo genera unidades de voz para responder hablando en el otro idioma.</p></div>
+</div>
+
+<h2 id="resultados">Resultados</h2>
+<h3>1 · Nuestra versión a mano = la oficial</h3>
+<div class="tbl"><table>
+<tr><th></th><th>Transcribir (spa)</th><th>Traducir (eng)</th></tr>
+<tr><td>Diferencia máx. en logits</td><td class="num">4,8·10⁻⁶</td><td class="num">3,0·10⁻⁶</td></tr>
+<tr><td>Diferencia en atención del encoder</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><td>Texto</td><td>«Aerosmith canceló los conciertos pendientes de su gira.» ✔</td><td>«Aerosmith canceled the upcoming concerts from their tour.» ✔</td></tr>
+</table></div>
+<h3>2 · Métricas (150 frases de FLEURS, GPU T4)</h3>
+<div class="tbl"><table>
+<tr><th>Modelo</th><th>Transcribir: WER ↓</th><th>Traducir: BLEU ↑</th><th>chrF ↑</th></tr>
+<tr><td><b>SeamlessM4T v2</b></td><td class="num">6,7 %</td><td class="num"><b>27,5</b></td><td class="num"><b>57,0</b></td></tr>
+<tr><td>Whisper large-v3</td><td class="num"><b>4,1 %</b></td><td class="num">24,5</td><td class="num">55,3</td></tr>
+</table></div>
+<ul>
+  <li><b>Traduciendo, gana Seamless</b> (+3 BLEU): es mejor en 84 de 150 frases y en todas las duraciones, sobre todo en frases cortas (22,6 vs 16,7).</li>
+  <li><b>Transcribiendo español, gana Whisper</b> (4,1 % vs 6,7 %). Whisper large-v3 es más reciente que el Whisper que compara el artículo y tiene mucho entrenamiento en español. Seamless está pensado para traducir.</li>
+  <li>Los dos van 6–10 veces más rápido que el tiempo real en GPU.</li>
+</ul>
+<h3>3 · Errores que vale la pena contar</h3>
+<ul>
+  <li><b>“Luna”</b> (un luchador): Whisper tradujo <i>“The Moon”</i>; Seamless dejó el nombre.</li>
+  <li><b>“802.11a”</b>: Seamless escribió <i>“eight hundred and eleven a”</i> y BLEU lo castigó, aunque suena igual.</li>
+  <li><b>“Su defensa…”</b> (de ellos): los dos dijeron <i>“His”</i>; el “su” español no dice si es singular o plural.</li>
+</ul>
+<div class="say"><b>Frase para la sustentación</b>“Nuestra implementación a mano da exactamente lo mismo que la oficial. En traducción Seamless supera a Whisper large-v3 por 3 puntos BLEU, pero en transcripción del español Whisper es mejor: cada modelo brilla en la tarea para la que fue diseñado.”</div>
+
+
+<h2 id="limitaciones">Limitaciones</h2>
+<ul>
+  <li><b>Tamaño:</b> ~1,5 mil millones de parámetros para voz→texto (≈ 6 GB en RAM). En CPU tarda varios segundos por frase.</li>
+  <li><b>Licencia no comercial</b> (CC BY-NC 4.0): solo uso académico o de investigación.</li>
+  <li><b>Audios largos:</b> pensado para frases; audios de minutos hay que trocearlos.</li>
+  <li><b>Calidad desigual entre idiomas:</b> mejor en idiomas con muchos datos (español, inglés) que en lenguas con pocos recursos.</li>
+  <li><b>Errores de nombres propios y homófonos</b>, que se transmiten a la traducción.</li>
+  <li><b>Greedy:</b> usamos la opción más probable en cada paso; beam search mejoraría algo la calidad a cambio de tiempo.</li>
+</ul>
+
+<h2 id="demo">Cómo correr la demo</h2>
+<pre class="cmd">git clone https://github.com/MiguelDiuza/seamless-traductor.git
+cd seamless-traductor
+python -m venv .venv
+.venv\Scripts\activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+python scripts/preparar_datos.py
+streamlit run app.py</pre>
+<p>La primera vez descarga ~9 GB de pesos: hacerlo con buen internet antes de la sustentación. Respaldo: <code>notebooks/colab_seamless.ipynb</code> corre todo en Colab con GPU y abre la app con un enlace temporal.</p>
+<p><b>Recorrido sugerido (4 min):</b> ejemplo de 5,6 s (Aerosmith) → transcripción y traducción con su WER y BLEU → tabla token a token → pestaña Cross-attention: diagonal en la transcripción y saltos en la traducción → Q·K·V con una palabra → máscara del decoder → grabar una frase propia en español.</p>
+
+<h2 id="guion">Guion de 15 minutos</h2>
+<p>Para 3 personas; cualquiera debe poder dar cualquier parte.</p>
+<div class="timeline">
+  <div class="slot"><div class="t">0–3 min</div><p><b>Problema y artículo.</b> Traducción de voz en cascada vs. de extremo a extremo. Seamless: autores, fecha, repo, pesos, por qué es encoder–decoder (sección 3.2.2).</p></div>
+  <div class="slot"><div class="t">3–8 min</div><p><b>Arquitectura y atención.</b> El mapa. Filtros Mel. Q, K, V en 6 pasos. Conformer, adaptador, decoder. De dónde salen Q, K, V en cada atención.</p></div>
+  <div class="slot"><div class="t">8–12 min</div><p><b>Demo en vivo.</b> El recorrido de arriba. Mostrar que la implementación propia da el mismo texto que la oficial.</p></div>
+  <div class="slot"><div class="t">12–15 min</div><p><b>Resultados, innovaciones y limitaciones.</b> WER y BLEU frente a Whisper, 6 innovaciones, limitaciones.</p></div>
+</div>
+
+<h2 id="preguntas">Preguntas probables</h2>
+<div class="qa">
+<details><summary>¿Por qué es un encoder–decoder si el artículo no lo dice con esas palabras?</summary><p>La sección 3.2.2 y la figura 3 describen el modelo X2T como un encoder de voz (w2v-BERT 2.0) más un decoder de texto (el de NLLB) que genera token a token condicionado en la salida del encoder. El artículo de la versión 1 (sección 4.2) lo llama un modelo <i>sequence-to-sequence</i>. En el código, el decoder tiene una capa <code>cross_attention</code> en cada bloque.</p></details>
+<details><summary>¿Por qué a partir de X se generan Q, K y V?</summary><p>Porque cada posición cumple tres roles: preguntar, ser encontrada y aportar información. Tres matrices aprendidas permiten que esos roles sean distintos.</p></details>
+<details><summary>¿Qué representa Q·Kᵀ y por qué dividir por √d<sub>k</sub>?</summary><p>Las compatibilidades entre todas las parejas. Se divide por √64 = 8 para que los puntajes no saturen el softmax.</p></details>
+<details><summary>¿Qué es la posición relativa del encoder?</summary><p>Un término extra en los puntajes, q·r, donde r depende de la distancia entre los dos frames. Así el modelo sabe qué tan lejos están sin una tabla de posiciones absolutas.</p></details>
+<details><summary>¿Para qué sirve la convolución del Conformer?</summary><p>Para los patrones locales del habla (unos 0,6 s). La atención capta el contexto global; la convolución, el detalle local.</p></details>
+<details><summary>¿Qué hace el adaptador de longitud?</summary><p>Reduce la memoria 8 veces (de 50 a ~6 vectores por segundo) para acercarla a la longitud del texto y abaratar la cross-attention.</p></details>
+<details><summary>¿Para qué la máscara y por qué no mirar el futuro?</summary><p>En entrenamiento el decoder tiene la frase completa; sin máscara copiaría la siguiente palabra. En inferencia el futuro no existe. −∞ antes del softmax da peso 0.</p></details>
+<details><summary>¿De dónde salen Q, K y V en la cross-attention?</summary><p>Q del decoder (quien necesita la información), K y V de la memoria del encoder (donde está la información).</p></details>
+<details><summary>¿Cómo sabe si debe transcribir o traducir?</summary><p>Por el segundo token de entrada del decoder: <code>__spa__</code> transcribe un audio en español; <code>__eng__</code> lo traduce al inglés.</p></details>
+<details><summary>¿Entrenaron el modelo?</summary><p>No. Usamos los pesos preentrenados de Meta, como pide el enunciado. Implementamos la inferencia y la reescribimos a mano.</p></details>
+<details><summary>¿Cómo saben que su implementación a mano es correcta?</summary><p><code>scripts/verificar_equivalencia.py</code>: diferencia máxima en logits de 5·10⁻⁶ (redondeo) y el mismo texto, en transcripción y en traducción.</p></details>
+<details><summary>¿Qué son WER y BLEU?</summary><p>WER: (sustituciones + borrados + inserciones) / palabras de la referencia; menor es mejor. BLEU: cuántos fragmentos de 1 a 4 palabras coinciden con una traducción humana, de 0 a 100; mayor es mejor.</p></details>
+</div>
+
+<h2 id="glosario">Glosario</h2>
+<div class="tbl"><table>
+<tr><td><b>S2TT</b></td><td>Speech-to-text translation: voz en un idioma → texto en otro.</td></tr>
+<tr><td><b>ASR</b></td><td>Reconocimiento de voz: voz → texto en el mismo idioma.</td></tr>
+<tr><td><b>Filtros Mel</b></td><td>Energía del sonido en 80 bandas de frecuencia, en escala parecida al oído humano.</td></tr>
+<tr><td><b>Conformer</b></td><td>Bloque que combina atención y convolución.</td></tr>
+<tr><td><b>Memoria</b></td><td>Salida del encoder; de ella salen K y V de la cross-attention.</td></tr>
+<tr><td><b>Token</b></td><td>Pedazo de palabra (SentencePiece); el vocabulario tiene 256 102.</td></tr>
+<tr><td><b>Greedy</b></td><td>Elegir siempre el token más probable.</td></tr>
+<tr><td><b>FLEURS</b></td><td>Benchmark de Google: las mismas frases leídas en 102 idiomas.</td></tr>
+</table></div>
+
+<footer>Proyecto final · Procesamiento de Datos Secuenciales · Grupo 5 · Basado en Seamless Communication <i>et al.</i>, arXiv:2312.05187 (2023).</footer>
+</main>
+</div>
