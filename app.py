@@ -11,6 +11,7 @@ Q·Kᵀ/√d_k, la máscara causal, el softmax y la cross-attention audio↔text
 from __future__ import annotations
 
 import hashlib
+import platform
 import re
 import sys
 import time
@@ -99,8 +100,24 @@ st.sidebar.markdown(
     "[Repositorio oficial](https://github.com/facebookresearch/seamless_communication) · "
     "[Pesos](https://huggingface.co/facebook/seamless-m4t-v2-large)"
 )
+st.sidebar.markdown(
+    "**Integrantes (Grupo 5):** Natalia Hernandez · Juan Ospina · Miguel Diuza · Yolima Alejandra Guadir"
+)
+
+
+@st.cache_resource
+def inicio_despliegue() -> str:
+    """Fecha y hora en que arrancó el servidor (se calcula una sola vez por proceso)."""
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+AVISO_DESPLIEGUE = (
+    f"🟢 **Desplegado en local** (http://localhost:8502 · CPU · Python {platform.python_version()}) · "
+    f"servidor iniciado: **{inicio_despliegue()}** · hora de esta ejecución: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
+)
 
 st.title("SeamlessM4T v2: el Transformer encoder–decoder por dentro")
+st.success(AVISO_DESPLIEGUE)
 if audio_bytes is None:
     st.info("Elige un audio en la barra lateral para comenzar.")
     st.stop()
