@@ -2,7 +2,7 @@
 
 Proyecto final · Procesamiento de Datos Secuenciales · 2026
 
-**Integrantes:** Natalia Hernandez · Juan Ospina · Miguel Diuza
+**Integrantes:** Natalia Hernandez · Juan Ospina · Miguel Diuza · Yolima Alejandra Guadir
 
 ---
 
