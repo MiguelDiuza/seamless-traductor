@@ -180,7 +180,27 @@ Las diferencias son de redondeo de punto flotante: las 48 capas reescritas a man
 
 ### 6.3 Capturas de la aplicación
 
-Ver `docs/capturas/` (se agregan las capturas propias de las pruebas).
+Capturas propias de la aplicación ejecutándose en local (CPU) con el audio de ejemplo `es_05.6s_1679` de FLEURS.
+
+**Resultado:** entrada (audio), transcripción en español y traducción al inglés, con la forma de onda y el banco de filtros Mel. La inferencia propia tarda unos 40 s en CPU.
+
+![Resultado de la inferencia](docs/capturas/01_resultado.jpg)
+
+**Cross-attention audio↔texto (capa 12 del decoder, promedio de cabezas):** en la transcripción aparece la diagonal; en la traducción el decoder salta a la parte del audio que necesita.
+
+![Cross-attention](docs/capturas/02_cross_attention.jpg)
+
+**Q, K, V paso a paso:** forma y origen de cada tensor en la cross-attention, con Q·Kᵀ/√d_k, softmax y pesos·V.
+
+![Q K V paso a paso](docs/capturas/03_qkv_paso_a_paso.jpg)
+
+**Self-attention del encoder Conformer (capa 0):** atención frame × frame, concentrada cerca de la diagonal (contexto local del habla).
+
+![Encoder Conformer](docs/capturas/04_encoder_conformer.jpg)
+
+**Self-attention enmascarada del decoder:** triángulo inferior; la máscara causal impide mirar tokens futuros.
+
+![Decoder con máscara causal](docs/capturas/05_decoder_mascara.jpg)
 
 ## 7. Conclusiones
 
