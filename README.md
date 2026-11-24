@@ -1,6 +1,8 @@
 # SeamlessM4T v2 por dentro: transcripción de voz con un Transformer encoder–decoder
 
-Proyecto final · Procesamiento de Datos Secuenciales 
+## Proyecto final · Procesamiento de Datos Secuenciales · Universidad Autónoma de Occidente
+
+---
 **Integrantes:** Natalia Hernandez · Juan Ospina · Miguel Diuza · Yolima Alejandra Guadir
 
 ---
