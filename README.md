@@ -19,7 +19,7 @@ Este trabajo aplica **SeamlessM4T v2** [1], Transformer encoder–decoder multil
 
 La implementación toma como referencia el artículo *“Seamless: Multilingual Expressive and Streaming Speech Translation”* (Seamless Communication, L. Barrault *et al.*, arXiv:2312.05187, diciembre de 2023) [1], que presenta la arquitectura SeamlessM4T v2. El código original se encuentra en el repositorio https://github.com/facebookresearch/seamless_communication, y los pesos preentrenados en [facebook/seamless-m4t-v2-large](https://huggingface.co/facebook/seamless-m4t-v2-large), distribuidos bajo licencia CC BY-NC 4.0 para uso académico.
 
-El reconocimiento automático de voz transforma una señal de audio, larga y continua, en una secuencia corta y discreta de tokens de texto. Ambas secuencias difieren en longitud y carecen de una alineación conocida a priori, lo que hace adecuada una arquitectura encoder–decoder: el encoder construye una representación contextual del audio y el decoder genera el texto de forma autoregresiva, consultando mediante cross-attention la región del audio relevante en cada paso.
+El reconocimiento automático de voz transforma una señal de audio continua en una secuencia de tokens de texto. Ambas secuencias son de naturaleza distinta, una es sonido y la otra texto, tienen longitudes diferentes y no existe una correspondencia directa entre los fragmentos de audio y los tokens. Para resolver este problema se emplea una arquitectura encoder–decoder: el encoder construye una representación contextual del audio y el decoder genera el texto de forma autorregresiva y mediante cross-attention calcula una distribución de pesos sobre las representaciones del audio, que indica cuáles son más relevantes para el token que se genera.
 
 SeamlessM4T v2 es un modelo de fundación que resuelve con una sola red varias tareas de voz y texto en cerca de 100 idiomas. Para la transcripción integra dos componentes preentrenados a gran escala: un encoder de voz Conformer (w2v-BERT 2.0), entrenado de forma autosupervisada con 4,5 millones de horas de audio, y el decoder de texto del traductor NLLB [7]. Su análisis permite observar, en un modelo actual, cómo se aplican los mecanismos del Transformer (proyecciones Q, K y V, atención escalada, multi-cabeza, máscara causal y cross-attention) junto con componentes específicos del procesamiento de voz.
 
@@ -89,7 +89,7 @@ La información recorre la arquitectura en el orden de la figura 3:
 4. **Decoder de texto NLLB.** Recibe `</s>`, el token del idioma y los tokens ya generados. Cada token se convierte en su embedding (tabla de 256 102 × 1024), se multiplica por √1024 y se le suma una posición sinusoidal. Luego pasa por 24 bloques con self-attention enmascarada, cross-attention sobre la memoria del audio y una red feed-forward.
 5. **Salida.** Una LayerNorm y la capa `lm_head` (1024 → 256 102) dan un puntaje para cada token del vocabulario, y el softmax elige el más probable. Ese token vuelve a la entrada del decoder y el ciclo se repite hasta `</s>`. El encoder se ejecuta una vez por audio; el decoder, una vez por token.
 
-La figura 4 amplía un bloque Conformer del encoder y un bloque del decoder, tal como se aplican en cada una de sus 24 capas.
+La figura 4 amplía un bloque Conformer del encoder y un bloque del decoder, tal como se aplican en cada una de sus 24 capas. En las descripciones siguientes, T es el número de vectores de audio que procesa el encoder, T_mem el número de vectores de la memoria tras el adaptador (T_mem = T / 8) y t el número de tokens generados hasta el paso actual en el decoder.
 
 ![Bloques internos del encoder y del decoder](docs/arquitectura/fig4_bloques_internos.png)
 
@@ -97,23 +97,24 @@ La figura 4 amplía un bloque Conformer del encoder y un bloque del decoder, tal
 
 En el bloque Conformer (izquierda), cada cuadro cumple una función:
 
-- **Entrada x (T, 1024):** en la primera capa, los vectores de la proyección Mel; después, la salida del bloque anterior.
+- **Entrada x (T, 1024):** en el primer bloque, los vectores de la proyección Mel
 - **LN → ½ FFN (Swish):** normaliza el vector y lo pasa por una red feed-forward que lo amplía de 1024 a 4096 dimensiones y lo regresa a 1024. Su salida se multiplica por 0,5 antes de sumarse, es decir, se aplica solo la mitad del cambio que propone; junto con la segunda ½ FFN suman el aporte de una FFN completa, repartida antes y después de la atención y la convolución [6].
 - **LN → Self-attention multi-cabeza:** cada fragmento de audio atiende a todos los demás, con 16 cabezas de 64 dimensiones. Usa posición relativa: distingue distancias de hasta 64 posiciones hacia atrás (≈ 1,28 s) y 8 hacia adelante (≈ 160 ms); las distancias mayores se truncan a esos límites.
-- **Módulo convolucional:** convolución punto a punto con compuerta GLU, que decide qué parte de la señal pasa; convolución *depthwise* de tamaño 31, que filtra cada canal mirando a los fragmentos vecinos; LayerNorm con Swish; y otra convolución punto a punto.
+- **Módulo convolucional:** una convolución punto a punto (kernel de tamaño 1, que combina los canales de cada instante sin mirar a sus vecinos) con compuerta GLU, que decide qué parte de la señal pasa; una convolución *depthwise* de tamaño 31, que filtra cada canal por separado a lo largo de los instantes anteriores; LayerNorm con Swish; y otra convolución punto a punto que vuelve a combinar los canales.
 - **LN → ½ FFN (Swish):** segunda mitad de la red feed-forward, también con peso 0,5.
 - **LayerNorm final:** estabiliza la salida del bloque.
 - **Salida del bloque (T, 1024):** pasa al bloque siguiente; tras el bloque 24 va a la FFN intermedia y al adaptador, que producen la memoria M.
 
 En el bloque del decoder (derecha), cada cuadro cumple una función:
 
-- **Entrada h:** al inicio, el embedding de los tokens con su posición; después, la salida del bloque anterior.
-- **LN → Self-attention enmascarada:** cada token mira solo a los anteriores, con 16 cabezas.
-- **LN → Cross-attention:** cada token consulta la memoria del audio (flecha naranja).
-- **LN → FFN (ReLU):** amplía cada vector de 1024 a 8192 dimensiones y lo regresa a 1024.
-- **Salida del bloque:** pasa al bloque siguiente; tras el bloque 24 va a LayerNorm y `lm_head`.
 
-Entre cuadro y cuadro hay una **conexión residual** (⊕), que suma la entrada de cada subcapa a su salida para conservar la información original y facilitar el entrenamiento de un modelo tan profundo.
+- **Entrada h (t, 1024):** en el primer bloque, el embedding de los t tokens generados hasta el momento, escalado por √1024 y sumado a una codificación posicional sinusoidal; en los siguientes, la salida del bloque anterior.
+- **LN → Self-attention enmascarada:** tras normalizar h, se obtienen Q, K y V de la misma secuencia de tokens mediante tres proyecciones aprendidas, divididas en 16 cabezas de 64 dimensiones. La matriz Q·Kᵀ/√64, de t × t, recibe una máscara causal que anula las posiciones futuras, de modo que cada token solo atiende a sí mismo y a los anteriores.
+- **LN → Cross-attention:** Q se obtiene de los tokens, y K y V de la memoria del audio (flecha naranja), de forma (T_mem, 1024). Cada cabeza calcula una matriz de pesos de t × T_mem, cuyas filas suman 1 e indican qué regiones del audio son relevantes para cada token; con esos pesos se combinan los values del audio.
+- **LN → FFN (ReLU):** red feed-forward aplicada a cada token por separado: una capa lineal amplía el vector de 1024 a 8192 dimensiones, la función ReLU introduce no linealidad y una segunda capa lineal lo regresa a 1024.
+- **Salida del bloque (t, 1024):** pasa al bloque siguiente; tras el bloque 24, una LayerNorm y la capa `lm_head` (1024 → 256 102) producen los logits del siguiente token.
+
+Cada subcapa se suma a su entrada mediante una conexión residual (⊕), lo que conserva la información y estabiliza el entrenamiento de las 24 capas.
 
 ### 3.5 Entradas y salidas del modelo
 
@@ -165,7 +166,7 @@ La operación es la misma en las cuatro atenciones del camino de transcripción;
 | Self-attention del decoder | tokens ya escritos | los mismos tokens | t × t |
 | **Cross-attention** | **tokens ya escritos** | **memoria del audio** | **t × T_mem** |
 
-T es el número de vectores de audio en el encoder, T_mem el número de vectores de la memoria tras el adaptador y t el número de tokens escritos hasta el paso actual. En el ejemplo de la sección 5.7, T = 280 y T_mem = 35.
+T, T_mem y t se definen en la sección 3.4; en el ejemplo de la sección 5.7, T = 280 y T_mem = 35.
 
 En las self-attention, Q, K y V salen de la misma secuencia. En la cross-attention, Q sale del texto, porque el decoder es quien busca, y K y V salen del audio, porque es la entrada la que ofrece el contenido. En la self-attention del encoder se suma además la posición relativa a los puntajes, y en la del decoder, la máscara causal.
 
@@ -373,13 +374,9 @@ Capturas propias de la aplicación ejecutándose en local (CPU) con el audio de 
 
 ## 7. Conclusiones
 
-**Aprendizajes**
-
-- La transcripción con SeamlessM4T v2 requiere solo un subconjunto de la arquitectura del artículo: el extractor de bancos de filtros Mel, el encoder Conformer w2v-BERT 2.0, el adaptador de longitud y el decoder de texto. El text encoder, UnitY2, el vocoder y el teacher T2U no intervienen en esta tarea.
-- El modelo combina los bloques del Transformer (Q, K, V, atención escalada, multi-cabeza, máscara causal y cross-attention) con componentes propios del habla: el Conformer, que une atención global y convolución local; la posición relativa, que representa la distancia entre fragmentos de audio; y el adaptador, que acerca la longitud del audio a la del texto.
-- La cross-attention es el punto en el que el texto se alinea con el audio: Q proviene de los tokens generados y K y V de la memoria del audio. En la transcripción, sus pesos forman una diagonal, porque el texto sigue el mismo orden de la voz.
-- El artículo no describe la generación de Q, K y V ni la estructura interna de los bloques. Reconstruirlas a partir de la configuración del modelo y reimplementar las 48 capas permitió verificar cada tensor, con resultados equivalentes a los del modelo oficial (diferencias del orden de 10⁻⁶).
-- En el caso evaluado, español en FLEURS, SeamlessM4T v2 obtiene un WER de 6,74 % y un CER de 4,61 %, mientras que Whisper large-v3 transcribe con menos error (4,06 % y 2,47 %). Este resultado contrasta con el promedio de 60 idiomas reportado en el artículo, donde SeamlessM4T v2 supera a Whisper large-v3. El desempeño en transcripción depende, por tanto, del idioma: la ventaja de SeamlessM4T v2 se concentra en idiomas con menos datos de entrenamiento.
+- El trabajo permitió identificar que SeamlessM4T v2 sigue la estructura general del Transformer encoder–decoder, pero con variaciones propias del procesamiento de voz. En lugar de embeddings de texto, la entrada se representa con bancos de filtros Mel proyectados a 1024 dimensiones; el encoder no es un Transformer estándar sino un Conformer (w2v-BERT 2.0), que combina atención global con convolución local y representa la posición como distancia relativa entre fragmentos de audio; y un adaptador de longitud reduce la secuencia del audio para acoplarla al decoder de texto. 
+- La reimplementación del modelo permitió reconstruir y verificar, con diferencias del orden de 10⁻⁶ respecto al modelo oficial, cómo se generan Q, K y V mediante proyecciones aprendidas y cómo cambia su origen en cada tipo de atención. Se identificó que la cross-attention es el punto en el que el texto se alinea con el audio: Q proviene de los tokens generados y K y V de la memoria del audio, y sus pesos forman una diagonal porque el texto sigue el orden de la voz, mientras que la máscara causal del decoder garantiza que cada token solo dependa de los anteriores.
+- En el caso evaluado, español en FLEURS, SeamlessM4T v2 obtiene un WER de 6,74 % y un CER de 4,61 %, mientras que Whisper large-v3 transcribe con menos error (4,06 % y 2,47 %) y algo más rápido (RTF de 0,125 frente a 0,156). Este resultado contrasta con el promedio de 60 idiomas reportado en el artículo, donde SeamlessM4T v2 supera a Whisper large-v3, lo que indica que su ventaja se concentra en idiomas con menos datos de entrenamiento.
 
 **Limitaciones**
 
